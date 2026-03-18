@@ -282,6 +282,7 @@ def _compile_one(panel_config: dict, config_path: Path, output_path: Path) -> No
     # Parse panel SVG
     tree = ET.parse(panel_path)
     root = tree.getroot()
+    parent_map = {child: parent for parent in root.iter() for child in parent}
 
     # Register namespaces to preserve them in output
     namespaces = {
@@ -373,10 +374,26 @@ def _compile_one(panel_config: dict, config_path: Path, output_path: Path) -> No
             continue
 
         # Clear group and add scaled content
-        # Preserve all original attributes
         original_attribs = dict(group.attrib)
-        group.clear()
-        group.attrib.update(original_attribs)
+        tag_name = group.tag.split("}")[-1] if "}" in group.tag else group.tag
+
+        if tag_name == "rect":
+            # Replace rect placeholder with a <g> translated to its x,y position.
+            # SVG renderers do not render children of shape elements like <rect>.
+            ns = group.tag.split("}")[0] + "}" if "}" in group.tag else ""
+            container = ET.Element(f"{ns}g")
+            container.set("id", figure_id)
+            x = original_attribs.get("x", "0")
+            y = original_attribs.get("y", "0")
+            container.set("transform", f"translate({x},{y})")
+            parent = parent_map[group]
+            idx = list(parent).index(group)
+            parent.remove(group)
+            parent.insert(idx, container)
+            group = container
+        else:
+            group.clear()
+            group.attrib.update(original_attribs)
 
         for element in content:
             # Apply scale transform
@@ -414,7 +431,7 @@ def _compile_one(panel_config: dict, config_path: Path, output_path: Path) -> No
     logger.info(f"Panel compiled to {output_path}")
 
 
-def compile_panel(config_path: Path, output_path: Path) -> None:
+def compile_panel(config_path: Path, fallback_output: Path) -> None:
     """Compile one or more panels from a config file."""
     with open(config_path) as f:
         config = yaml.safe_load(f)
@@ -427,6 +444,8 @@ def compile_panel(config_path: Path, output_path: Path) -> None:
                 continue
             _compile_one(item, config_path, config_path.parent / item_output)
     else:
+        yaml_output = config.get("output")
+        output_path = config_path.parent / yaml_output if yaml_output else fallback_output
         _compile_one(config, config_path, output_path)
 
 
@@ -447,17 +466,10 @@ def main() -> None:
         default=default_config,
         help=f"Configuration YAML file (defaults to {default_config})",
     )
-    parser.add_argument(
-        "-o",
-        "--output",
-        default="out.svg",
-        help="Output SVG file (defaults to out.svg)",
-    )
-
     args = parser.parse_args()
 
     config_path = Path(args.config)
-    output_path = Path(args.output)
+    output_path = config_path.with_suffix(".svg")
 
     if not config_path.exists():
         logger.error(f"Config file not found: {config_path}")
