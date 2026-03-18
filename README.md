@@ -1,6 +1,6 @@
 # pc — Panel Compiler
 
-Compose scientific figures from SVG plots and LaTeX equations into a single SVG panel.
+Compose scientific figures from SVG plots, PDF figures, and LaTeX equations into a single SVG or PDF panel.
 
 You define a panel template in Inkscape (or any SVG editor) with named group placeholders, then write a small YAML config that maps each placeholder to an SVG file or a LaTeX string. `pc` scales each figure to fit its placeholder and writes the compiled panel.
 
@@ -36,18 +36,18 @@ pc pc.yaml -o out.svg
 pip install panel-compiler
 ```
 
-For LaTeX rendering, `pdflatex` and `inkscape` must be on your `PATH`.
+For LaTeX rendering and PDF input/output, `pdflatex` and `inkscape` must be on your `PATH`.
 
 ## Usage
 
 ```
-pc [config.yaml] [-o output.svg]
+pc [config.yaml] [-o output.svg|pdf]
 ```
 
 | Argument | Default | Description |
 |---|---|---|
 | `config.yaml` | `pc.yaml` | YAML config (see below) |
-| `-o output.svg` | `out.svg` | Output file |
+| `-o output` | `out.svg` | Output file — `.svg` or `.pdf` |
 
 ## Config format
 
@@ -56,9 +56,9 @@ Single panel:
 ```yaml
 panel: path/to/panel.svg   # required — relative to this config file
 
-# SVG figure
+# SVG or PDF figure
 figure_id:
-  file: path/to/plot.svg   # relative to this config file
+  file: path/to/plot.svg   # .svg or .pdf — relative to this config file
   fit: contain             # contain | height | width  (default: contain)
   width: 200               # optional: override target dimensions
   height: 100

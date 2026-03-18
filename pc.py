@@ -153,6 +153,32 @@ def load_svg_content(svg_path: Path) -> list[ET.Element]:
     return [copy.deepcopy(element) for element in tree.getroot()]
 
 
+def pdf_to_svg(pdf_path: Path) -> Path | None:
+    """Convert PDF to SVG using inkscape, returning path to SVG in a temp dir.
+
+    The caller is responsible for keeping the returned tempfile alive.
+    Returns (svg_path, tmpdir) or None on failure.
+    """
+    tmpdir = tempfile.mkdtemp()
+    svg_file = Path(tmpdir) / "out.svg"
+    result = subprocess.run(
+        [
+            "inkscape",
+            "--pdf-poppler",
+            str(pdf_path),
+            "--export-type=svg",
+            "--export-filename",
+            str(svg_file),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        logger.error(f"Inkscape PDF conversion failed for {pdf_path}\n{result.stderr}")
+        return None
+    return svg_file
+
+
 def render_latex_to_svg(latex_text: str) -> list[ET.Element]:
     """Render LaTeX text to SVG using pdflatex and pdf2svg."""
     try:
@@ -308,10 +334,18 @@ def _compile_one(panel_config: dict, config_path: Path, output_path: Path) -> No
             # Scale LaTeX based on fontsize (12pt is base)
             scale = fontsize_num / 12.0
         elif svg_file:
-            svg_path = config_path.parent / svg_file
-            if not svg_path.exists():
-                logger.warning(f"SVG file not found: {svg_path}")
+            src_path = config_path.parent / svg_file
+            if not src_path.exists():
+                logger.warning(f"File not found: {src_path}")
                 continue
+
+            if src_path.suffix.lower() == ".pdf":
+                svg_path = pdf_to_svg(src_path)
+                if svg_path is None:
+                    logger.warning(f"Failed to convert PDF for {figure_id}")
+                    continue
+            else:
+                svg_path = src_path
 
             # Get dimensions from group or config
             config_dims = None
@@ -333,7 +367,6 @@ def _compile_one(panel_config: dict, config_path: Path, output_path: Path) -> No
             else:
                 scale = calculate_scale(source_dims, target_dims, fit)
 
-            # Load source SVG content
             content = load_svg_content(svg_path)
         else:
             logger.warning(f"No SVG file or LaTeX text specified for {figure_id}")
@@ -358,7 +391,26 @@ def _compile_one(panel_config: dict, config_path: Path, output_path: Path) -> No
             group.append(element)
 
     # Write output
-    tree.write(output_path, encoding="utf-8", xml_declaration=True)
+    if output_path.suffix.lower() == ".pdf":
+        with tempfile.TemporaryDirectory() as tmpdir:
+            svg_tmp = Path(tmpdir) / "out.svg"
+            tree.write(svg_tmp, encoding="utf-8", xml_declaration=True)
+            result = subprocess.run(
+                [
+                    "inkscape",
+                    str(svg_tmp),
+                    "--export-type=pdf",
+                    "--export-filename",
+                    str(output_path),
+                ],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0:
+                logger.error(f"Inkscape PDF export failed\n{result.stderr}")
+                return
+    else:
+        tree.write(output_path, encoding="utf-8", xml_declaration=True)
     logger.info(f"Panel compiled to {output_path}")
 
 
