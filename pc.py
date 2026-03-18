@@ -148,11 +148,53 @@ def calculate_scale(
         raise ValueError(f"Unknown fit option: {fit}")
 
 
-def load_svg_content(svg_path: Path) -> list[ET.Element]:
+def _rewrite_ids(elements: list[ET.Element], prefix: str) -> None:
+    """Prefix all IDs and their references within elements to avoid conflicts."""
+    # Collect all IDs first
+    ids = set()
+    for el in elements:
+        for node in el.iter():
+            if id_val := node.get("id"):
+                ids.add(id_val)
+
+    if not ids:
+        return
+
+    # Rewrite id attributes and references
+    ref_attrs = {
+        "href",
+        "{http://www.w3.org/1999/xlink}href",
+        "clip-path",
+        "mask",
+        "fill",
+        "filter",
+        "marker-start",
+        "marker-mid",
+        "marker-end",
+    }
+    for el in elements:
+        for node in el.iter():
+            if id_val := node.get("id"):
+                node.set("id", f"{prefix}-{id_val}")
+            for attr in ref_attrs:
+                if val := node.get(attr):
+                    for old_id in ids:
+                        val = val.replace(f"#{old_id}", f"#{prefix}-{old_id}")
+                    node.set(attr, val)
+            # Also handle style attributes with url() references
+            if style := node.get("style"):
+                for old_id in ids:
+                    style = style.replace(f"url(#{old_id})", f"url(#{prefix}-{old_id})")
+                node.set("style", style)
+
+
+def load_svg_content(svg_path: Path, id_prefix: str | None = None) -> list[ET.Element]:
     """Load SVG content as list of elements."""
     tree = ET.parse(svg_path)
-    # Return deep copies to avoid element reuse when multiple groups use the same SVG
-    return [copy.deepcopy(element) for element in tree.getroot()]
+    elements = [copy.deepcopy(element) for element in tree.getroot()]
+    if id_prefix:
+        _rewrite_ids(elements, id_prefix)
+    return elements
 
 
 def pdf_to_svg(pdf_path: Path) -> Path | None:
@@ -368,7 +410,7 @@ def _compile_one(panel_config: dict, config_path: Path, output_path: Path) -> No
             else:
                 scale = calculate_scale(source_dims, target_dims, fit)
 
-            content = load_svg_content(svg_path)
+            content = load_svg_content(svg_path, id_prefix=figure_id)
         else:
             logger.warning(f"No SVG file or LaTeX text specified for {figure_id}")
             continue

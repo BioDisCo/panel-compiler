@@ -2,7 +2,7 @@
 
 Compose scientific figures from SVG plots, PDF figures, and LaTeX equations into a single SVG or PDF panel.
 
-You define a panel template in Inkscape (or any SVG editor) with named group placeholders, then write a small YAML config that maps each placeholder to an SVG file or a LaTeX string. `pc` scales each figure to fit its placeholder and writes the compiled panel.
+You define a panel template in Inkscape with named group placeholders (set via the layer/group label field), then write a small YAML config that maps each label to an SVG file, PDF, or a LaTeX string. `pc` scales each figure to fit its placeholder and writes the compiled panel.
 
 ## Example
 
@@ -36,7 +36,7 @@ pc pc.yaml -o out.svg
 pip install panel-compiler
 ```
 
-For LaTeX rendering and PDF input/output, `pdflatex` and `inkscape` must be on your `PATH`.
+For LaTeX rendering, `pdflatex` must be on your `PATH`. For PDF figures and PDF output, `pdf2svg` and `inkscape` must be on your `PATH`. On macOS: `brew install pdf2svg`.
 
 ## Usage
 
@@ -94,6 +94,8 @@ Multiple panels in one config (list form) — `-o` is ignored, each block needs 
 - `width` — scale to match placeholder width
 
 Placeholder dimensions are read from the group element's `width`/`height` attributes in the panel SVG. You can override them in the config.
+
+**Group matching** uses `inkscape:label` first (the label field in Inkscape's XML editor or layers panel), then plain `label`, then `id`.
 
 ## License
 
