@@ -32,9 +32,13 @@ pc pc.yaml -o out.svg
 ## Installation
 
 ```bash
-pip install git+https://github.com/mfuegger/pc.git
-# or with uv
 uv tool install git+https://github.com/mfuegger/pc.git
+```
+
+or with pip:
+
+```bash
+pip install git+https://github.com/mfuegger/pc.git
 ```
 
 For LaTeX rendering, `pdflatex` must be on your `PATH`. For PDF figures and PDF output, `pdf2svg` and `inkscape` must be on your `PATH`. On macOS: `brew install pdf2svg`.
@@ -52,36 +56,63 @@ pc [config.yaml] [-o output.svg|pdf]
 
 ## Config format
 
-Single panel — `output` accepts a string or a list to produce multiple formats at once:
+### Single panel
 
 ```yaml
-panel: path/to/panel.svg   # required — relative to this config file
+panel: panel.svg    # required — path to the panel SVG, relative to this config file
+output: out.svg     # optional — overridden by -o; omit to use -o or default out.svg
+```
 
-# SVG or PDF figure
-figure_id:
-  file: path/to/plot.svg   # .svg or .pdf — relative to this config file
-  fit: contain             # contain | height | width  (default: contain)
-  width: 200               # optional: override target dimensions
-  height: 100
+`output` can also be a list to produce multiple formats in one run:
 
-# LaTeX equation
-equation_id:
-  tex: $E = mc^2$          # any LaTeX math or text
-  size: 12pt               # font size (default: 10pt)
-
-# Shorthand — SVG file only
-other_id: path/to/fig.svg
-
-# Single output (string)
-output: out.svg
-
-# Multiple outputs — produces both files from one run
+```yaml
 output:
   - out.svg
   - out.pdf
 ```
 
-Multiple panels in one config (list form) — `-o` is ignored, each block needs `output`:
+Each remaining key is a **group label** that must match a group in the panel SVG. `pc` looks up the group by `inkscape:label` first, then `label`, then `id`.
+
+### Figure entry (SVG or PDF)
+
+```yaml
+plot:
+  file: results.svg   # path relative to this config file; .svg or .pdf
+  fit: contain        # contain | height | width  (default: contain)
+  width: 200          # optional — override the target width  (SVG user units)
+  height: 100         # optional — override the target height (SVG user units)
+```
+
+Fit strategies:
+- `contain` — scale uniformly to fit within the placeholder box (default)
+- `height` — scale to match the placeholder height exactly
+- `width`  — scale to match the placeholder width exactly
+
+Target dimensions come from `width`/`height` attributes on the group element in the panel SVG. `width`/`height` in the config override these.
+
+PDF files are converted via `pdf2svg` before embedding.
+
+### LaTeX entry
+
+```yaml
+label:
+  tex: $y = \sin(x)$   # any LaTeX — math mode, text, amsmath, …
+  size: 12pt           # font size (default: 10pt); scales the rendered output
+```
+
+Rendered via `pdflatex` + `inkscape`. No fit scaling — the output is sized by `size` alone.
+
+### Shorthand
+
+A plain string value is treated as an SVG file path with `fit: contain`:
+
+```yaml
+other: path/to/fig.svg
+```
+
+### Multiple panels
+
+Use a YAML list. The `-o` flag is ignored; each entry must have its own `output`:
 
 ```yaml
 - panel: panel1.svg
@@ -90,21 +121,13 @@ Multiple panels in one config (list form) — `-o` is ignored, each block needs 
     file: results.svg
 
 - panel: panel2.svg
-  output: out2.svg
+  output:
+    - out2.svg
+    - out2.pdf
   label:
     tex: $E = mc^2$
     size: 12pt
 ```
-
-**Fit strategies:**
-
-- `contain` — scale to fit within the placeholder (default)
-- `height` — scale to match placeholder height
-- `width` — scale to match placeholder width
-
-Placeholder dimensions are read from the group element's `width`/`height` attributes in the panel SVG. You can override them in the config.
-
-**Group matching** uses `inkscape:label` first (the label field in Inkscape's XML editor or layers panel), then plain `label`, then `id`.
 
 ## License
 
