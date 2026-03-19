@@ -48,6 +48,20 @@ pc pc.yaml
 
 ## Installation
 
+From PyPI:
+
+```bash
+uv tool install panel-compiler
+```
+
+or with pip:
+
+```bash
+pip install panel-compiler
+```
+
+From the repository:
+
 ```bash
 uv tool install git+https://github.com/mfuegger/pc.git
 ```
