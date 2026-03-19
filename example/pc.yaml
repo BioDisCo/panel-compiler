@@ -1,9 +1,16 @@
 panel: panel.svg
+output:
+  - out.svg
+  - panel.pdf
 
-sinus:
-  file: sinus.svg
+logistic_log:
+  file: logistic_log.svg
   fit: contain
 
-cosinus:
-  file: cos.svg
+logistic:
+  file: logistic.svg
   fit: contain
+
+formula:
+  tex: $\frac{dN}{dt} = rN\!\left(1 - \frac{N}{K}\right)$
+  size: 10pt
