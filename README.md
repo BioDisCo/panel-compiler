@@ -41,8 +41,9 @@ Compiled result `example/out.svg`:
 ![compiled panel](example/out.svg)
 
 ```bash
-cd example && python subfigures.py
-pc example/pc.yaml
+cd example
+python subfigures.py
+pc pc.yaml
 ```
 
 ## Installation

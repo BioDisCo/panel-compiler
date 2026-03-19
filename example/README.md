@@ -1,13 +1,10 @@
 # Example
 
-Generate the input SVGs:
+Run from inside the `example/` directory:
+
 ```bash
 python subfigures.py
+pc pc.yaml
 ```
 
-Compile the panel (from repo root):
-```bash
-pc example/pc.yaml
-```
-
-`pc.yaml` maps the `exp` and `cos` groups in `panel.svg` to the generated plots.
+`pc.yaml` maps the `logistic`, `logistic_log`, and `formula` groups in `panel.svg`.
