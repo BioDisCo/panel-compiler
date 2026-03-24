@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
 name = "panel-compiler"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Compose SVG figures and LaTeX equations into a panel template"
 readme = "README.md"
 authors = [
@@ -16,6 +16,9 @@ dependencies = ["pyyaml"]
 
 [project.scripts]
 pc = "pc:main"
+
+[tool.hatch.version]
+source = "vcs"
 
 [tool.hatch.build.targets.wheel]
 include = ["pc.py"]

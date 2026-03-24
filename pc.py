@@ -403,7 +403,7 @@ def _compile_one(panel_config: dict, config_path: Path, output_path: Path) -> No
 
             # If no target dimensions, embed without scaling
             if target_dims is None:
-                logger.warning(
+                logger.debug(
                     f"Group {figure_id} has no width/height attributes and none specified in config. "
                     "Embedding without scaling."
                 )
