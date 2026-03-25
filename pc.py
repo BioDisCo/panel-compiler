@@ -37,8 +37,29 @@ class ColorFormatter(logging.Formatter):
         return super().format(record)
 
 
+_UNIT_TO_MM: dict[str, float] = {
+    "mm": 1.0,
+    "cm": 10.0,
+    "in": 25.4,
+    "pt": 25.4 / 72,
+    "pc": 25.4 / 6,
+    "px": 25.4 / 96,
+}
+
+
+def _parse_length_mm(value: str) -> float | None:
+    """Parse an SVG length string to mm.  Returns None if unit is unknown."""
+    import re
+    m = re.fullmatch(r"([\d.]+)\s*([a-z]*)", value.strip())
+    if not m:
+        return None
+    num, unit = float(m.group(1)), m.group(2) or "px"
+    factor = _UNIT_TO_MM.get(unit)
+    return num * factor if factor is not None else None
+
+
 class SVGDimensions:
-    """SVG dimensions extracted from viewBox or width/height."""
+    """SVG dimensions in mm, extracted from viewBox or width/height."""
 
     def __init__(self, width: float, height: float) -> None:
         self.width = width
@@ -46,21 +67,36 @@ class SVGDimensions:
 
     @classmethod
     def from_svg(cls, svg_path: Path) -> "SVGDimensions":
-        """Extract dimensions from SVG file."""
+        """Extract dimensions from SVG file, converting to mm."""
         tree = ET.parse(svg_path)
         root = tree.getroot()
 
-        # Try viewBox first (more reliable for scaled SVGs)
+        width_attr = root.get("width")
+        height_attr = root.get("height")
+
+        # Determine mm-per-user-unit from width/height attributes if present
         viewbox = root.get("viewBox")
+        if viewbox and width_attr and height_attr:
+            parts = viewbox.split()
+            vb_w, vb_h = float(parts[2]), float(parts[3])
+            w_mm = _parse_length_mm(width_attr)
+            h_mm = _parse_length_mm(height_attr)
+            if w_mm is not None and h_mm is not None and vb_w > 0 and vb_h > 0:
+                # Use width-derived scale (width and height should agree)
+                mm_per_unit = w_mm / vb_w
+                return cls(width=vb_w * mm_per_unit, height=vb_h * mm_per_unit)
+
+        # viewBox without unit context: assume user units are already mm
         if viewbox:
             parts = viewbox.split()
             return cls(width=float(parts[2]), height=float(parts[3]))
 
         # Fall back to width/height attributes
-        width = root.get("width")
-        height = root.get("height")
-        if width and height:
-            return cls(width=float(width), height=float(height))
+        if width_attr and height_attr:
+            w_mm = _parse_length_mm(width_attr)
+            h_mm = _parse_length_mm(height_attr)
+            if w_mm is not None and h_mm is not None:
+                return cls(width=w_mm, height=h_mm)
 
         raise ValueError(f"Cannot determine dimensions for {svg_path}")
 
