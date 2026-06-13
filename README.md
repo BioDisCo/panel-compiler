@@ -108,7 +108,7 @@ The output path is taken from the `output` key in the config. If omitted, it def
 ```yaml
 panel: panel.svg    # required — path to the panel SVG, relative to this config file
 output: out.svg     # optional — defaults to <config-stem>.svg if omitted
-content_style: "stroke: #000000; stroke-width: 0.5; fill: initial;"  # optional
+content_style: "stroke: none; fill: initial;"  # optional — empty by default
 ```
 
 `output` can also be a list to produce multiple formats in one run. Supported
@@ -138,7 +138,7 @@ output:
 `dpi` is ignored for SVG; for PDF it sets the resolution at which Inkscape
 rasterises filter effects (drop shadows, blurs).
 
-`content_style` is a CSS declaration block applied to all paths, circles, and polygons inside embedded SVG figures. It overrides type-selector rules in the panel template that would otherwise bleed into embedded content. The default is `stroke: none; fill: initial;`. LaTeX labels always get `stroke: none` regardless of this setting.
+`content_style` is an optional CSS declaration block applied to all paths, circles, and polygons inside embedded SVG figures. It is **empty by default**, so each figure keeps its own strokes and fills. Set it only when the panel template ships type-selector rules (e.g. a `<style>` with `path { stroke: ... }`) that would otherwise bleed into embedded content; the value then overrides them (e.g. `stroke: none; fill: initial;`). LaTeX labels always get `stroke: none` regardless of this setting.
 
 Each remaining key is a **label** that must match an element in the panel SVG. `pc` looks it up by `inkscape:label` first, then `label`, then `id`. The element can be a `<g>` group or a `<rect>` placeholder — a `<rect>` is automatically replaced by a `<g>` positioned at the rect's `x`/`y`. A warning (including the panel filename) is emitted for any label not found; compilation of the remaining entries continues.
 

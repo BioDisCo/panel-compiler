@@ -386,7 +386,11 @@ def _inline_latex_glyphs(elements: list[ET.Element]) -> None:
 
 RESERVED_KEYS = {"panel", "output", "content_style"}
 
-_DEFAULT_CONTENT_STYLE = "stroke: none; fill: initial;"
+# Empty by default: embedded SVG/PDF figures keep their own strokes and fills.
+# A non-empty value injects a `.pc-content` CSS reset for the rare case where the
+# panel template ships type-selector rules that would otherwise bleed into figures.
+# LaTeX glyphs are reset separately and unconditionally (see the style block below).
+_DEFAULT_CONTENT_STYLE = ""
 
 
 def _write_output(
@@ -585,8 +589,9 @@ def _compile_tree(
             wrapper.append(element)
         group.append(wrapper)
 
-    # Inject a CSS reset so template-level type selectors (e.g. `path { stroke: ... }`)
-    # do not bleed into embedded content such as LaTeX glyph outlines rendered as paths.
+    # LaTeX glyph outlines are always reset so template-level type selectors
+    # (e.g. `path { stroke: ... }`) cannot bleed into them. Embedded SVG/PDF
+    # figures are left untouched unless the user opts in via `content_style`.
     # Remove any reset left by a previous compilation first to avoid accumulation.
     ns_svg = "{http://www.w3.org/2000/svg}"
     defs = root.find(f"{ns_svg}defs")
@@ -595,16 +600,21 @@ def _compile_tree(
     if defs is None:
         defs = ET.SubElement(root, f"{ns_svg}defs")
     for old in defs.findall(f"{ns_svg}style") + defs.findall("style"):
-        if old.text and ".pc-content" in old.text:
+        if old.text and ".pc-tex-content" in old.text:
             defs.remove(old)
-    style_reset = ET.SubElement(defs, f"{ns_svg}style")
-    style_reset.set("type", "text/css")
-    style_reset.text = (
-        f".pc-content path, .pc-content circle, .pc-content polygon "
-        f"{{ {content_style} }}\n"
+    rules = []
+    if content_style:
+        rules.append(
+            ".pc-content path, .pc-content circle, .pc-content polygon "
+            f"{{ {content_style} }}"
+        )
+    rules.append(
         ".pc-tex-content path, .pc-tex-content circle, .pc-tex-content polygon "
         "{ stroke: none !important; fill: initial; }"
     )
+    style_reset = ET.SubElement(defs, f"{ns_svg}style")
+    style_reset.set("type", "text/css")
+    style_reset.text = "\n".join(rules)
 
     return tree
 

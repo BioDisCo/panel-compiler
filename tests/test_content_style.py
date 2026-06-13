@@ -29,12 +29,16 @@ def _style_text(tree: "ET.ElementTree[ET.Element]") -> str:
     return "\n".join(s.text or "" for s in styles)
 
 
-def test_default_content_style_injected(tmp_path: Path) -> None:
+def test_default_leaves_figures_untouched(tmp_path: Path) -> None:
+    """By default no `.pc-content` reset is injected, so figures keep their paint;
+    the LaTeX glyph reset is still present."""
     _panel(tmp_path / "p.svg")
     _figure(tmp_path / "f.svg")
     tree = _compile_tree({"panel": "p.svg", "fig": "f.svg"}, tmp_path / "pc.yaml")
     assert tree is not None
-    assert ".pc-content" in _style_text(tree)
+    style = _style_text(tree)
+    assert ".pc-content path" not in style
+    assert ".pc-tex-content" in style
 
 
 def test_custom_content_style_applied(tmp_path: Path) -> None:
@@ -53,7 +57,11 @@ def test_tex_content_style_always_stroke_none(tmp_path: Path) -> None:
     _panel(tmp_path / "p.svg")
     _figure(tmp_path / "f.svg")
     tree = _compile_tree(
-        {"panel": "p.svg", "content_style": "stroke: red; fill: initial;", "fig": "f.svg"},
+        {
+            "panel": "p.svg",
+            "content_style": "stroke: red; fill: initial;",
+            "fig": "f.svg",
+        },
         tmp_path / "pc.yaml",
     )
     assert tree is not None
@@ -69,6 +77,7 @@ def test_style_not_accumulated_on_recompile(tmp_path: Path) -> None:
     config = {"panel": "p.svg", "output": "p.svg", "fig": "f.svg"}
 
     from pc import _write_output
+
     tree = _compile_tree(config, tmp_path / "pc.yaml")
     assert tree is not None
     _write_output(tree, tmp_path / "p.svg")
@@ -78,4 +87,4 @@ def test_style_not_accumulated_on_recompile(tmp_path: Path) -> None:
     tree2 = _compile_tree(config, tmp_path / "pc.yaml")
     assert tree2 is not None
     style = _style_text(tree2)
-    assert style.count(".pc-content path") == 1, "style block must not accumulate"
+    assert style.count(".pc-tex-content path") == 1, "style block must not accumulate"
