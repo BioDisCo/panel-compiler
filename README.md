@@ -111,13 +111,32 @@ output: out.svg     # optional — defaults to <config-stem>.svg if omitted
 content_style: "stroke: #000000; stroke-width: 0.5; fill: initial;"  # optional
 ```
 
-`output` can also be a list to produce multiple formats in one run:
+`output` can also be a list to produce multiple formats in one run. Supported
+formats are SVG, PDF, and PNG (chosen by the file extension); PDF and PNG are
+exported through Inkscape:
 
 ```yaml
 output:
   - out.svg
   - out.pdf
+  - out.png
 ```
+
+For raster output, set the resolution per entry with `dpi` (the panel's physical
+`width`/`height` in mm then fix the pixel dimensions). Either nest the options
+under the filename or use the explicit `file:` form:
+
+```yaml
+output:
+  - out.svg
+  - out.png:        # keyed form
+      dpi: 600
+  - file: thumb.png # file form
+    dpi: 150
+```
+
+`dpi` is ignored for SVG; for PDF it sets the resolution at which Inkscape
+rasterises filter effects (drop shadows, blurs).
 
 `content_style` is a CSS declaration block applied to all paths, circles, and polygons inside embedded SVG figures. It overrides type-selector rules in the panel template that would otherwise bleed into embedded content. The default is `stroke: none; fill: initial;`. LaTeX labels always get `stroke: none` regardless of this setting.
 

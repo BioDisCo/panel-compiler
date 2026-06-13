@@ -365,14 +365,20 @@ def _inline_latex_glyphs(elements: list[ET.Element]) -> None:
         _replace_uses(root)
 
     def _remove_defs(parent: ET.Element) -> None:
-        for c in [c for c in parent
-                  if (c.tag.split("}")[-1] if "}" in c.tag else c.tag) == "defs"]:
+        for c in [
+            c
+            for c in parent
+            if (c.tag.split("}")[-1] if "}" in c.tag else c.tag) == "defs"
+        ]:
             parent.remove(c)
         for c in parent:
             _remove_defs(c)
 
-    for el in [el for el in elements
-               if (el.tag.split("}")[-1] if "}" in el.tag else el.tag) == "defs"]:
+    for el in [
+        el
+        for el in elements
+        if (el.tag.split("}")[-1] if "}" in el.tag else el.tag) == "defs"
+    ]:
         elements.remove(el)
     for root in elements:
         _remove_defs(root)
@@ -383,25 +389,34 @@ RESERVED_KEYS = {"panel", "output", "content_style"}
 _DEFAULT_CONTENT_STYLE = "stroke: none; fill: initial;"
 
 
-def _write_output(tree: "ET.ElementTree[ET.Element]", output_path: Path) -> None:
-    """Write a compiled SVG tree to an SVG or PDF output path."""
-    if output_path.suffix.lower() == ".pdf":
+def _write_output(
+    tree: "ET.ElementTree[ET.Element]", output_path: Path, dpi: float | None = None
+) -> None:
+    """Write a compiled SVG tree to an SVG, PDF, or PNG output path.
+
+    For PNG (raster) the panel's physical size and ``dpi`` set the pixel
+    dimensions; ``dpi`` also controls the resolution at which Inkscape
+    rasterises filter effects when exporting PDF. SVG output ignores ``dpi``.
+    """
+    export_type = output_path.suffix.lower().lstrip(".")
+    if export_type in ("pdf", "png"):
         with tempfile.TemporaryDirectory() as tmpdir:
             svg_tmp = Path(tmpdir) / "out.svg"
             tree.write(svg_tmp, encoding="utf-8", xml_declaration=True)
-            result = subprocess.run(
-                [
-                    "inkscape",
-                    str(svg_tmp),
-                    "--export-type=pdf",
-                    "--export-filename",
-                    str(output_path),
-                ],
-                capture_output=True,
-                text=True,
-            )
+            cmd = [
+                "inkscape",
+                str(svg_tmp),
+                f"--export-type={export_type}",
+                "--export-filename",
+                str(output_path),
+            ]
+            if dpi is not None:
+                cmd.append(f"--export-dpi={dpi}")
+            result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode != 0:
-                logger.error(f"Inkscape PDF export failed\n{result.stderr}")
+                logger.error(
+                    f"Inkscape {export_type.upper()} export failed\n{result.stderr}"
+                )
                 return
     else:
         tree.write(output_path, encoding="utf-8", xml_declaration=True)
@@ -624,11 +639,30 @@ def compile_panel(config_path: Path, fallback_output: Path) -> None:
     with open(config_path) as f:
         config = yaml.load(f, Loader=_WarnDuplicatesLoader)
 
-    def _resolve_outputs(raw: str | list[str] | None, fallback: Path) -> list[Path]:
+    def _resolve_outputs(raw, fallback: Path) -> list[tuple[Path, float | None]]:
+        """Resolve the ``output`` value to (path, dpi) pairs.
+
+        Each entry is either a plain filename or a mapping carrying options,
+        e.g. ``{panel.png: {dpi: 600}}`` or ``{file: panel.png, dpi: 600}``.
+        ``dpi`` applies to raster (PNG) and PDF filter rasterisation.
+        """
         if not raw:
-            return [fallback]
-        items = raw if isinstance(raw, list) else [raw]
-        return [config_path.parent / o for o in items]
+            return [(fallback, None)]
+        resolved: list[tuple[Path, float | None]] = []
+        for item in raw if isinstance(raw, list) else [raw]:
+            if isinstance(item, str):
+                name, opts = item, {}
+            elif isinstance(item, dict):
+                if "file" in item:
+                    name, opts = item["file"], item
+                else:
+                    name, opts = next(iter(item.items()))
+                    opts = opts or {}
+            else:
+                logger.error(f"Invalid output entry: {item!r}")
+                continue
+            resolved.append((config_path.parent / name, opts.get("dpi")))
+        return resolved
 
     if isinstance(config, list):
         for item in config:
@@ -636,17 +670,17 @@ def compile_panel(config_path: Path, fallback_output: Path) -> None:
             if not raw:
                 logger.error("Each panel block must have an 'output' key")
                 continue
-            outputs = _resolve_outputs(raw, fallback_output)
             tree = _compile_tree(item, config_path)
             if tree is not None:
-                for output_path in outputs:
-                    _write_output(tree, output_path)
+                for output_path, dpi in _resolve_outputs(raw, fallback_output):
+                    _write_output(tree, output_path, dpi)
     else:
-        outputs = _resolve_outputs(config.get("output"), fallback_output)
         tree = _compile_tree(config, config_path)
         if tree is not None:
-            for output_path in outputs:
-                _write_output(tree, output_path)
+            for output_path, dpi in _resolve_outputs(
+                config.get("output"), fallback_output
+            ):
+                _write_output(tree, output_path, dpi)
 
 
 def main() -> None:

@@ -1,6 +1,7 @@
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+import pc
 from pc import _compile_one, compile_panel
 
 INKSCAPE_NS = "http://www.inkscape.org/namespaces/inkscape"
@@ -85,6 +86,54 @@ def test_missing_group_skips_gracefully(tmp_path: Path) -> None:
     )
 
     assert output.exists()
+
+
+def test_per_output_dpi_keyed_form(tmp_path: Path, monkeypatch) -> None:
+    """`output` entry `name.png:` with a nested `dpi` is passed to the writer."""
+    _make_panel(tmp_path / "panel.svg")
+    _make_figure(tmp_path / "fig.svg")
+    config = tmp_path / "pc.yaml"
+    config.write_text(
+        "panel: panel.svg\n"
+        "output:\n"
+        "  - out.svg\n"
+        "  - out.png:\n"
+        "      dpi: 600\n"
+        "plot:\n"
+        "  file: fig.svg\n"
+    )
+
+    calls: list[tuple[str, float | None]] = []
+    monkeypatch.setattr(
+        pc, "_write_output", lambda tree, path, dpi=None: calls.append((path.name, dpi))
+    )
+    compile_panel(config, tmp_path / "fallback.svg")
+
+    assert ("out.svg", None) in calls
+    assert ("out.png", 600) in calls
+
+
+def test_per_output_dpi_file_form(tmp_path: Path, monkeypatch) -> None:
+    """`output` entry `{file: name.png, dpi: N}` is also accepted."""
+    _make_panel(tmp_path / "panel.svg")
+    _make_figure(tmp_path / "fig.svg")
+    config = tmp_path / "pc.yaml"
+    config.write_text(
+        "panel: panel.svg\n"
+        "output:\n"
+        "  - file: out.png\n"
+        "    dpi: 300\n"
+        "plot:\n"
+        "  file: fig.svg\n"
+    )
+
+    calls: list[tuple[str, float | None]] = []
+    monkeypatch.setattr(
+        pc, "_write_output", lambda tree, path, dpi=None: calls.append((path.name, dpi))
+    )
+    compile_panel(config, tmp_path / "fallback.svg")
+
+    assert ("out.png", 300) in calls
 
 
 def test_multi_output(tmp_path: Path) -> None:
