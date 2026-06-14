@@ -1,7 +1,7 @@
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from pc import compile_panel
+from panel_compiler.config import compile_panel
 
 
 def _panel(path: Path, group_id: str) -> None:

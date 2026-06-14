@@ -1,6 +1,6 @@
 import xml.etree.ElementTree as ET
 
-from pc import _rewrite_ids
+from panel_compiler.renderers import _rewrite_ids
 
 
 def test_prefixes_id() -> None:

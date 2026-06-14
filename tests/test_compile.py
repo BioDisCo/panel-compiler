@@ -1,8 +1,11 @@
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from subprocess import CompletedProcess
 
-import pc
-from pc import _compile_one, compile_panel
+from panel_compiler import config as config_module
+from panel_compiler import renderers
+from panel_compiler.compiler import _compile_one
+from panel_compiler.config import compile_panel
 
 INKSCAPE_NS = "http://www.inkscape.org/namespaces/inkscape"
 
@@ -58,6 +61,50 @@ def test_compile_shorthand_string(tmp_path: Path) -> None:
     assert output.exists()
 
 
+def test_compile_tex_file_figure(tmp_path: Path, monkeypatch) -> None:
+    _make_panel(tmp_path / "panel.svg", width=200, height=100)
+    (tmp_path / "figure.tex").write_text(
+        "\\documentclass[tikz,border=2pt]{standalone}\n"
+        "\\usepackage{tikz}\n"
+        "\\begin{document}\n"
+        "\\begin{tikzpicture}\\draw (0,0) rectangle (2,1);\\end{tikzpicture}\n"
+        "\\end{document}\n"
+    )
+    output = tmp_path / "out.svg"
+
+    calls: list[str] = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd[0])
+        if cmd[0] == "pdflatex":
+            output_dir = Path(cmd[cmd.index("-output-directory") + 1])
+            jobname = cmd[cmd.index("-jobname") + 1]
+            (output_dir / f"{jobname}.pdf").write_text("%PDF-1.4\n")
+        elif cmd[0] == "pdf2svg":
+            svg_file = Path(cmd[2])
+            svg_file.write_text(
+                "<?xml version='1.0' encoding='utf-8'?>"
+                '<svg xmlns="http://www.w3.org/2000/svg"'
+                ' width="400" height="100" viewBox="0 0 400 100">'
+                '<rect id="tikz-box" x="0" y="0" width="400" height="100"/>'
+                "</svg>"
+            )
+        return CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(renderers.subprocess, "run", fake_run)
+
+    _compile_one(
+        {"panel": "panel.svg", "plot": {"file": "figure.tex", "fit": "width"}},
+        tmp_path / "pc.yaml",
+        output,
+    )
+
+    group = ET.parse(output).getroot().find(f".//*[@{{{INKSCAPE_NS}}}label='plot']")
+    assert group is not None
+    assert calls == ["pdflatex", "pdf2svg"]
+    assert "scale(0.5)" in (list(group)[0].get("transform") or "")
+
+
 def test_scale_applied(tmp_path: Path) -> None:
     """Figure 400x100 into group 200x100 with fit=width → scale 0.5."""
     _make_panel(tmp_path / "panel.svg", width=200, height=100)
@@ -105,7 +152,9 @@ def test_per_output_dpi_keyed_form(tmp_path: Path, monkeypatch) -> None:
 
     calls: list[tuple[str, float | None]] = []
     monkeypatch.setattr(
-        pc, "_write_output", lambda tree, path, dpi=None: calls.append((path.name, dpi))
+        config_module,
+        "_write_output",
+        lambda tree, path, dpi=None: calls.append((path.name, dpi)),
     )
     compile_panel(config, tmp_path / "fallback.svg")
 
@@ -129,7 +178,9 @@ def test_per_output_dpi_file_form(tmp_path: Path, monkeypatch) -> None:
 
     calls: list[tuple[str, float | None]] = []
     monkeypatch.setattr(
-        pc, "_write_output", lambda tree, path, dpi=None: calls.append((path.name, dpi))
+        config_module,
+        "_write_output",
+        lambda tree, path, dpi=None: calls.append((path.name, dpi)),
     )
     compile_panel(config, tmp_path / "fallback.svg")
 

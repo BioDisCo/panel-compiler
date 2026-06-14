@@ -1,6 +1,6 @@
 import xml.etree.ElementTree as ET
 
-from pc import _inline_latex_glyphs
+from panel_compiler.renderers import _inline_latex_glyphs
 
 
 NS = "http://www.w3.org/2000/svg"

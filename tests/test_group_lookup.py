@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pc import _compile_tree
+from panel_compiler.compiler import _compile_tree
 
 NS_INK = "http://www.inkscape.org/namespaces/inkscape"
 NS_SVG = "http://www.w3.org/2000/svg"

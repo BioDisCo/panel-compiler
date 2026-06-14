@@ -1,7 +1,8 @@
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from pc import _compile_tree
+from panel_compiler.compiler import _compile_tree
+from panel_compiler.output import _write_output
 
 
 def _panel(path: Path) -> None:
@@ -75,8 +76,6 @@ def test_style_not_accumulated_on_recompile(tmp_path: Path) -> None:
     _panel(tmp_path / "p.svg")
     _figure(tmp_path / "f.svg")
     config = {"panel": "p.svg", "output": "p.svg", "fig": "f.svg"}
-
-    from pc import _write_output
 
     tree = _compile_tree(config, tmp_path / "pc.yaml")
     assert tree is not None

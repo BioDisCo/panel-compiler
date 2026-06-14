@@ -3,7 +3,12 @@ from pathlib import Path
 
 import pytest
 
-from pc import SVGDimensions, calculate_bbox, calculate_scale, get_group_dimensions
+from panel_compiler.dimensions import (
+    SVGDimensions,
+    calculate_bbox,
+    calculate_scale,
+    get_group_dimensions,
+)
 
 
 def test_from_viewbox(tmp_path: Path) -> None:

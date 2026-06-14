@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from pc import compile_panel
+from panel_compiler.config import compile_panel
 
 
 def _make_panel(path: Path) -> None:

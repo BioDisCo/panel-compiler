@@ -13,10 +13,10 @@ requires-python = ">=3.12"
 dependencies = ["pyyaml"]
 
 [project.scripts]
-pc = "pc:main"
+pc = "panel_compiler.cli:main"
 
 [tool.hatch.build.targets.wheel]
-include = ["pc.py"]
+include = ["pc.py", "panel_compiler"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
