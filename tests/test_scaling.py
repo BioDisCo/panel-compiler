@@ -194,6 +194,26 @@ def test_rect_replaced_by_translated_group(tmp_path: Path) -> None:
     assert list(g), "group must contain embedded content"
 
 
+def test_rect_replacement_preserves_existing_transform(tmp_path: Path) -> None:
+    """Rect placeholder transforms must survive replacement by a group."""
+    _figure_svg(tmp_path / "fig.svg", 100, 100, "100", "100")
+    _panel_mm(tmp_path / "panel.svg", 10, 20, 80, 60)
+    panel = tmp_path / "panel.svg"
+    panel.write_text(
+        panel.read_text().replace(
+            'fill="#f0f0f0"/>',
+            'fill="#f0f0f0" transform="rotate(10)"/>',
+        )
+    )
+
+    tree = _compile_tree({"panel": "panel.svg", "fig": "fig.svg"}, tmp_path / "pc.yaml")
+
+    assert tree is not None
+    g = tree.getroot().find(".//*[@id='fig']")
+    assert g is not None
+    assert g.get("transform") == "rotate(10) translate(10,20)"
+
+
 def test_no_rect_width_attr_after_compile(tmp_path: Path) -> None:
     """The group replacing the rect must not carry over the width/height attrs."""
     _figure_svg(tmp_path / "fig.svg", 100, 80, "100", "80")

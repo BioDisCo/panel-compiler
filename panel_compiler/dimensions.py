@@ -1,6 +1,7 @@
 """SVG dimension and scaling helpers."""
 
 import xml.etree.ElementTree as ET
+import re
 from pathlib import Path
 
 
@@ -25,7 +26,9 @@ class SVGDimensions:
 
         viewbox = root.get("viewBox")
         if viewbox:
-            parts = viewbox.split()
+            parts = [part for part in re.split(r"[\s,]+", viewbox.strip()) if part]
+            if len(parts) != 4:
+                raise ValueError(f"Cannot parse viewBox for {svg_path}: {viewbox}")
             return cls(width=float(parts[2]), height=float(parts[3]))
 
         width_attr = root.get("width")

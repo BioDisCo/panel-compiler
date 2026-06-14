@@ -207,7 +207,11 @@ def _prepare_placeholder(
         container.set("id", figure_id)
         x = original_attribs.get("x", "0")
         y = original_attribs.get("y", "0")
-        container.set("transform", f"translate({x},{y})")
+        transforms = []
+        if original_transform := original_attribs.get("transform"):
+            transforms.append(original_transform)
+        transforms.append(f"translate({x},{y})")
+        container.set("transform", " ".join(transforms))
         if w := original_attribs.get("width"):
             container.set("data-pc-width", w)
         if h := original_attribs.get("height"):

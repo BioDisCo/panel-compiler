@@ -45,6 +45,7 @@ def _rewrite_ids(elements: list[ET.Element], prefix: str) -> None:
         "clip-path",
         "mask",
         "fill",
+        "stroke",
         "filter",
         "marker-start",
         "marker-mid",

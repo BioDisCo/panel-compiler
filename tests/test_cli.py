@@ -39,3 +39,13 @@ def test_cli_explicit_config_sets_matching_fallback_output(
     cli.main()
 
     assert calls == [(config, config.with_suffix(".svg"))]
+
+
+def test_cli_version_falls_back_without_installed_metadata(monkeypatch) -> None:
+    monkeypatch.setattr(
+        cli,
+        "version",
+        lambda name: (_ for _ in ()).throw(cli.PackageNotFoundError(name)),
+    )
+
+    assert cli._package_version() == "unknown"

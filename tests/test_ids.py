@@ -32,6 +32,19 @@ def test_updates_style_url() -> None:
     assert "url(#fig-clip1)" in (rect.get("style") or "")
 
 
+def test_updates_stroke_url() -> None:
+    elem = ET.fromstring(
+        '<g xmlns="http://www.w3.org/2000/svg">'
+        '<linearGradient id="grad"/>'
+        '<path stroke="url(#grad)"/>'
+        "</g>"
+    )
+    _rewrite_ids([elem], "fig")
+    path = elem.find("{http://www.w3.org/2000/svg}path")
+    assert path is not None
+    assert path.get("stroke") == "url(#fig-grad)"
+
+
 def test_no_ids_is_noop() -> None:
     elem = ET.fromstring('<g xmlns="http://www.w3.org/2000/svg"><rect/></g>')
     _rewrite_ids([elem], "pfx")  # must not raise

@@ -3,13 +3,20 @@
 import argparse
 import logging
 import shutil
-from importlib.metadata import version
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 from panel_compiler.config import compile_panel
 from panel_compiler.logging_utils import ColorFormatter
 
 logger = logging.getLogger("pc")
+
+
+def _package_version() -> str:
+    try:
+        return version("panel-compiler")
+    except PackageNotFoundError:
+        return "unknown"
 
 
 def main() -> None:
@@ -23,7 +30,7 @@ def main() -> None:
         description="Compile SVG figures into a panel template"
     )
     parser.add_argument(
-        "--version", action="version", version=f"%(prog)s {version('panel-compiler')}"
+        "--version", action="version", version=f"%(prog)s {_package_version()}"
     )
     default_config = "pc.yaml"
     parser.add_argument(

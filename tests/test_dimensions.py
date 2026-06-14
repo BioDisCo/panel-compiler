@@ -19,6 +19,22 @@ def test_from_viewbox(tmp_path: Path) -> None:
     assert dims.height == 150
 
 
+def test_from_comma_separated_viewbox(tmp_path: Path) -> None:
+    f = tmp_path / "s.svg"
+    f.write_text('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0,0,300,150"/>')
+    dims = SVGDimensions.from_svg(f)
+    assert dims.width == 300
+    assert dims.height == 150
+
+
+def test_from_mixed_separator_viewbox(tmp_path: Path) -> None:
+    f = tmp_path / "s.svg"
+    f.write_text('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0, 0 300, 150"/>')
+    dims = SVGDimensions.from_svg(f)
+    assert dims.width == 300
+    assert dims.height == 150
+
+
 def test_from_width_height(tmp_path: Path) -> None:
     f = tmp_path / "s.svg"
     f.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="40"/>')
