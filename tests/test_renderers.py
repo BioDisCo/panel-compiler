@@ -18,9 +18,33 @@ def test_render_file_to_svg_returns_source_for_svg(tmp_path: Path) -> None:
 
 
 def test_render_file_to_svg_rejects_unsupported_suffix(tmp_path: Path) -> None:
-    rendered = renderers.render_file_to_svg(tmp_path / "figure.png")
+    rendered = renderers.render_file_to_svg(tmp_path / "figure.gif")
 
     assert rendered is None
+
+
+def _tiny_png(width: int, height: int) -> bytes:
+    """Minimal PNG header (signature + IHDR) -- enough to read the size."""
+    sig = b"\x89PNG\r\n\x1a\n"
+    ihdr = b"\x00\x00\x00\x0dIHDR" + width.to_bytes(4, "big") + height.to_bytes(4, "big")
+    return sig + ihdr + b"\x08\x02\x00\x00\x00"
+
+
+def test_render_file_to_svg_wraps_png(tmp_path: Path) -> None:
+    png = tmp_path / "figure.png"
+    png.write_bytes(_tiny_png(40, 20))
+
+    rendered = renderers.render_file_to_svg(png)
+
+    assert rendered is not None
+    text = rendered.svg_path.read_text()
+    assert 'viewBox="0 0 40 20"' in text
+    assert "<image" in text
+    assert "data:image/png;base64," in text
+
+    assert rendered.tempdir is not None
+    rendered.cleanup()
+    assert not rendered.tempdir.exists()
 
 
 def test_pdf_to_svg_cleans_tempdir_on_failure(tmp_path: Path, monkeypatch) -> None:

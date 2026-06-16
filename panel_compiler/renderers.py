@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import copy
 import logging
 import shlex
@@ -195,6 +196,54 @@ def tex_file_to_svg(tex_path: Path) -> RenderedFigure | None:
     return RenderedFigure(svg_path, tmpdir)
 
 
+def _png_size(data: bytes) -> tuple[int, int] | None:
+    if data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR":
+        return None
+    return int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
+
+
+def _jpeg_size(data: bytes) -> tuple[int, int] | None:
+    if data[:2] != b"\xff\xd8":
+        return None
+    i, n = 2, len(data)
+    while i + 9 < n:
+        if data[i] != 0xFF:
+            i += 1
+            continue
+        marker = data[i + 1]
+        if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):
+            return (
+                int.from_bytes(data[i + 7 : i + 9], "big"),
+                int.from_bytes(data[i + 5 : i + 7], "big"),
+            )
+        i += 2 + int.from_bytes(data[i + 2 : i + 4], "big")
+    return None
+
+
+def image_to_svg(image_path: Path) -> RenderedFigure | None:
+    """Wrap a raster image (PNG/JPEG) in an SVG so it fits a panel slot like any
+    other figure. The image is embedded as a base64 data URI at its pixel size;
+    the panel compiler then scales that to the placeholder."""
+    data = image_path.read_bytes()
+    suffix = image_path.suffix.lower()
+    size = _png_size(data) if suffix == ".png" else _jpeg_size(data)
+    if size is None:
+        logger.error(f"Could not read image dimensions for {image_path}")
+        return None
+    width, height = size
+    mime = "image/png" if suffix == ".png" else "image/jpeg"
+    href = f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
+    tmpdir = Path(tempfile.mkdtemp())
+    svg_file = tmpdir / "out.svg"
+    svg_file.write_text(
+        f'<svg xmlns="http://www.w3.org/2000/svg" '
+        f'xmlns:xlink="http://www.w3.org/1999/xlink" '
+        f'width="{width}" height="{height}" viewBox="0 0 {width} {height}">'
+        f'<image width="{width}" height="{height}" xlink:href="{href}"/></svg>'
+    )
+    return RenderedFigure(svg_file, tmpdir)
+
+
 def render_file_to_svg(source_path: Path) -> RenderedFigure | None:
     """Render a supported source file to an SVG path."""
     suffix = source_path.suffix.lower()
@@ -204,6 +253,8 @@ def render_file_to_svg(source_path: Path) -> RenderedFigure | None:
         return pdf_to_svg(source_path)
     if suffix == ".tex":
         return tex_file_to_svg(source_path)
+    if suffix in (".png", ".jpg", ".jpeg"):
+        return image_to_svg(source_path)
 
     logger.warning(f"Unsupported figure file type '{suffix}' for {source_path}")
     return None
