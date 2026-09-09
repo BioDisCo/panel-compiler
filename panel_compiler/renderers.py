@@ -122,9 +122,10 @@ def _format_process_failure(
     if cwd is not None:
         lines.append(f"Working directory: {cwd}")
 
-    log_tail = _read_text_tail(log_path) if log_path is not None else ""
-    if log_tail:
-        lines.extend([f"LaTeX log tail ({log_path.name}):", log_tail])
+    if log_path is not None:
+        log_tail = _read_text_tail(log_path)
+        if log_tail:
+            lines.extend([f"LaTeX log tail ({log_path.name}):", log_tail])
 
     if result.stdout.strip():
         lines.extend(["stdout tail:", _tail_text(result.stdout)])

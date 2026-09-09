@@ -51,6 +51,13 @@ def test_viewbox_takes_priority(tmp_path: Path) -> None:
     assert SVGDimensions.from_svg(f).width == 300
 
 
+def test_malformed_viewbox_raises(tmp_path: Path) -> None:
+    f = tmp_path / "s.svg"
+    f.write_text('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300"/>')
+    with pytest.raises(ValueError):
+        SVGDimensions.from_svg(f)
+
+
 def test_missing_dims_raises(tmp_path: Path) -> None:
     f = tmp_path / "s.svg"
     f.write_text('<svg xmlns="http://www.w3.org/2000/svg"/>')
@@ -114,6 +121,18 @@ def test_get_group_dims_from_config_fallback() -> None:
     dims = get_group_dimensions(g, SVGDimensions(120, 60))
     assert dims is not None
     assert dims.width == 120
+
+
+def test_get_group_dims_from_bbox_when_no_attribs_or_config() -> None:
+    g = ET.fromstring(
+        '<g xmlns="http://www.w3.org/2000/svg">'
+        '<rect x="0" y="0" width="80" height="40"/>'
+        "</g>"
+    )
+    dims = get_group_dimensions(g)
+    assert dims is not None
+    assert dims.width == pytest.approx(80)
+    assert dims.height == pytest.approx(40)
 
 
 def test_get_group_dims_none_when_empty() -> None:

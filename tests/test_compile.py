@@ -187,6 +187,21 @@ def test_per_output_dpi_file_form(tmp_path: Path, monkeypatch) -> None:
     assert ("out.png", 300) in calls
 
 
+def test_invalid_output_entry_logs_error_and_is_skipped(tmp_path: Path, caplog) -> None:
+    _make_panel(tmp_path / "panel.svg")
+    _make_figure(tmp_path / "fig.svg")
+    config = tmp_path / "pc.yaml"
+    config.write_text(
+        "panel: panel.svg\noutput:\n  - out.svg\n  - 42\nplot:\n  file: fig.svg\n"
+    )
+
+    with caplog.at_level("ERROR", logger="pc"):
+        compile_panel(config, tmp_path / "fallback.svg")
+
+    assert (tmp_path / "out.svg").exists()
+    assert "Invalid output entry: 42" in caplog.text
+
+
 def test_multi_output(tmp_path: Path) -> None:
     _make_panel(tmp_path / "panel.svg")
     _make_figure(tmp_path / "fig.svg")

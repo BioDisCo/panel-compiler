@@ -11,15 +11,15 @@ def _glyph_svg() -> list[ET.Element]:
     """Minimal inkscape-style LaTeX SVG: one glyph in defs, one <use> referencing it."""
     root = ET.fromstring(
         f'<svg xmlns="{NS}" xmlns:xlink="{XLINK}">'
-        f'  <defs>'
+        f"  <defs>"
         f'    <g id="glyph-0">'
         f'      <path id="path1" d="M 0 0 L 10 10"/>'
-        f'    </g>'
-        f'  </defs>'
+        f"    </g>"
+        f"  </defs>"
         f'  <g fill="black">'
         f'    <use xlink:href="#glyph-0" x="5" y="12"/>'
-        f'  </g>'
-        f'</svg>'
+        f"  </g>"
+        f"</svg>"
     )
     return list(root)
 
@@ -27,14 +27,18 @@ def _glyph_svg() -> list[ET.Element]:
 def test_use_replaced_by_inline_group() -> None:
     elements = _glyph_svg()
     _inline_latex_glyphs(elements)
-    tags = {el.tag.split("}")[-1] if "}" in el.tag else el.tag for el in _iter_all(elements)}
+    tags = {
+        el.tag.split("}")[-1] if "}" in el.tag else el.tag for el in _iter_all(elements)
+    }
     assert "use" not in tags
 
 
 def test_defs_removed() -> None:
     elements = _glyph_svg()
     _inline_latex_glyphs(elements)
-    tags = {el.tag.split("}")[-1] if "}" in el.tag else el.tag for el in _iter_all(elements)}
+    tags = {
+        el.tag.split("}")[-1] if "}" in el.tag else el.tag for el in _iter_all(elements)
+    }
     assert "defs" not in tags
 
 
@@ -42,12 +46,18 @@ def test_path_inlined_with_translate() -> None:
     elements = _glyph_svg()
     _inline_latex_glyphs(elements)
     # Find the inlined wrapper group with translate(5,12)
-    groups = [el for el in _iter_all(elements)
-              if (el.tag.split("}")[-1] if "}" in el.tag else el.tag) == "g"
-              and "translate(5,12)" in (el.get("transform") or "")]
+    groups = [
+        el
+        for el in _iter_all(elements)
+        if (el.tag.split("}")[-1] if "}" in el.tag else el.tag) == "g"
+        and "translate(5,12)" in (el.get("transform") or "")
+    ]
     assert groups, "expected a <g transform='translate(5,12)'>"
-    paths = [c for c in groups[0]
-             if (c.tag.split("}")[-1] if "}" in c.tag else c.tag) == "path"]
+    paths = [
+        c
+        for c in groups[0]
+        if (c.tag.split("}")[-1] if "}" in c.tag else c.tag) == "path"
+    ]
     assert paths, "inlined group must contain the glyph path"
 
 
@@ -56,14 +66,17 @@ def test_zero_offset_no_transform() -> None:
         f'<svg xmlns="{NS}" xmlns:xlink="{XLINK}">'
         f'  <defs><g id="g0"><path id="p0" d="M 0 0"/></g></defs>'
         f'  <g><use xlink:href="#g0" x="0" y="0"/></g>'
-        f'</svg>'
+        f"</svg>"
     )
     elements = list(root)
     _inline_latex_glyphs(elements)
-    groups = [el for el in _iter_all(elements)
-              if (el.tag.split("}")[-1] if "}" in el.tag else el.tag) == "g"
-              and el.get("transform") is not None
-              and "translate" in el.get("transform", "")]
+    groups = [
+        el
+        for el in _iter_all(elements)
+        if (el.tag.split("}")[-1] if "}" in el.tag else el.tag) == "g"
+        and el.get("transform") is not None
+        and "translate" in el.get("transform", "")
+    ]
     assert not groups, "zero-offset use must not produce a translate transform"
 
 
@@ -73,9 +86,70 @@ def test_noop_when_no_use() -> None:
     )
     elements = list(root)
     _inline_latex_glyphs(elements)
-    paths = [el for el in _iter_all(elements)
-             if el.get("id") == "standalone"]
+    paths = [el for el in _iter_all(elements) if el.get("id") == "standalone"]
     assert paths, "standalone path must survive unchanged"
+
+
+def test_non_fragment_href_left_untouched() -> None:
+    root = ET.fromstring(
+        f'<svg xmlns="{NS}" xmlns:xlink="{XLINK}">'
+        f'  <g><use xlink:href="external.svg#glyph"/></g>'
+        f"</svg>"
+    )
+    elements = list(root)
+    _inline_latex_glyphs(elements)
+    tags = {
+        el.tag.split("}")[-1] if "}" in el.tag else el.tag for el in _iter_all(elements)
+    }
+    assert "use" in tags, "a non-fragment href must not be treated as a glyph reference"
+
+
+def test_dangling_reference_left_untouched() -> None:
+    root = ET.fromstring(
+        f'<svg xmlns="{NS}" xmlns:xlink="{XLINK}">'
+        f'  <g><use xlink:href="#missing"/></g>'
+        f"</svg>"
+    )
+    elements = list(root)
+    _inline_latex_glyphs(elements)
+    tags = {
+        el.tag.split("}")[-1] if "}" in el.tag else el.tag for el in _iter_all(elements)
+    }
+    assert "use" in tags, (
+        "a <use> with no matching id must be left in place, not dropped"
+    )
+
+
+def test_non_numeric_offset_still_gets_translate() -> None:
+    root = ET.fromstring(
+        f'<svg xmlns="{NS}" xmlns:xlink="{XLINK}">'
+        f'  <defs><g id="g0"><path id="p0" d="M 0 0"/></g></defs>'
+        f'  <g><use xlink:href="#g0" x="a" y="b"/></g>'
+        f"</svg>"
+    )
+    elements = list(root)
+    _inline_latex_glyphs(elements)
+    groups = [
+        el
+        for el in _iter_all(elements)
+        if (el.tag.split("}")[-1] if "}" in el.tag else el.tag) == "g"
+        and el.get("transform") == "translate(a,b)"
+    ]
+    assert groups, "non-numeric offsets must fall back to a literal translate"
+
+
+def test_nested_defs_removed() -> None:
+    root = ET.fromstring(
+        f'<svg xmlns="{NS}">  <g><defs><path id="unused" d="M 0 0"/></defs></g></svg>'
+    )
+    elements = list(root)
+    _inline_latex_glyphs(elements)
+    tags = {
+        el.tag.split("}")[-1] if "}" in el.tag else el.tag for el in _iter_all(elements)
+    }
+    assert "defs" not in tags, (
+        "a <defs> nested below a top-level element must also be stripped"
+    )
 
 
 def _iter_all(elements: list[ET.Element]):

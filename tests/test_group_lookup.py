@@ -26,7 +26,7 @@ def _panel_with(path: Path, extra_attrs: str) -> None:
 
 def test_lookup_by_inkscape_label(tmp_path: Path) -> None:
     _figure(tmp_path / "f.svg")
-    _panel_with(tmp_path / "p.svg", f'inkscape:label="myplot"')
+    _panel_with(tmp_path / "p.svg", 'inkscape:label="myplot"')
     tree = _compile_tree({"panel": "p.svg", "myplot": "f.svg"}, tmp_path / "pc.yaml")
     assert tree is not None
     g = tree.getroot().find(f".//*[@{{{NS_INK}}}label='myplot']")
