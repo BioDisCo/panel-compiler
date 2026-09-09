@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "panel-compiler"
-version = "0.1.9"
+version = "0.1.10"
 description = "Compose SVG figures and LaTeX equations into a panel template"
 readme = "README.md"
 authors = [{ name = "Matthias Függer", email = "mfuegger@gmail.com" }]
@@ -33,4 +33,5 @@ target-version = "py312"
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
 ]
