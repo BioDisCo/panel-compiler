@@ -154,8 +154,8 @@ Each remaining key is a **label** that must match an element in the panel SVG. `
 plot:
   file: results.svg   # path relative to this config file; .svg, .pdf, or .tex  (alias: svg:)
   fit: contain        # contain | height | width  (default: contain)
-  width: 200          # optional — override the target width  (SVG user units)
-  height: 100         # optional — override the target height (SVG user units)
+  width: 200          # optional — fallback target width  (SVG user units)
+  height: 100         # optional — fallback target height (SVG user units)
 ```
 
 Fit strategies:
@@ -227,6 +227,37 @@ Use a YAML list; each entry must have its own `output`. A plain mapping (non-lis
     tex: $E = mc^2$
     size: 12pt
 ```
+
+## Development and tests
+
+Run the full test suite with coverage:
+
+```bash
+uv run pytest
+# or: make test
+```
+
+Every run measures line and branch coverage for `panel_compiler` and the legacy
+`pc.py` module. The terminal report lists uncovered lines and branches; the
+combined coverage must be at least 95% or the command fails. The settings live
+in `pyproject.toml` and use `pytest-cov` with coverage.py.
+
+Open `htmlcov/index.html` for the annotated source report. `coverage.xml` is also
+generated for CI tools. These generated files are ignored by Git.
+
+GitHub Actions runs the same checks on every push and pull request with Python
+3.12 and 3.14, adds coverage to the job summary, and saves the HTML/XML reports
+as downloadable artifacts. External converter commands are mocked in the test
+suite, so running it does not require Inkscape or a LaTeX installation.
+
+For a focused regression test without the full-suite coverage threshold:
+
+```bash
+uv run pytest --no-cov tests/test_scaling.py
+```
+
+Coverage records which code the tests exercise; the regression assertions check
+the resulting SVG content, dimensions, references, and error handling.
 
 ## License
 

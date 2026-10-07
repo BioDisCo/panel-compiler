@@ -20,6 +20,15 @@ include = ["pc.py", "panel_compiler"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--cov --cov-report=term-missing --cov-report=html --cov-report=xml"
+
+[tool.coverage.run]
+source = ["panel_compiler", "pc"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 95
+precision = 2
 
 [tool.pyright]
 pythonVersion = "3.12"

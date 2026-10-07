@@ -178,9 +178,9 @@ def test_tex_file_to_svg_cleans_up_when_pdf_to_svg_fails(
     real_mkdtemp = renderers.tempfile.mkdtemp
     outer_tmpdir: Path | None = None
 
-    def spy_mkdtemp():
+    def spy_mkdtemp(*args, **kwargs):
         nonlocal outer_tmpdir
-        path = Path(real_mkdtemp())
+        path = Path(real_mkdtemp(*args, **kwargs))
         if outer_tmpdir is None:
             outer_tmpdir = path
         return str(path)
@@ -362,3 +362,58 @@ def test_inline_latex_logs_pdflatex_failure_context(
     assert "Command: pdflatex" in log_text
     assert "./doc.tex:8: Missing $ inserted." in log_text
     assert "inline stderr" in log_text
+
+
+@pytest.mark.parametrize(
+    "source_suffix,missing_tool",
+    [
+        (".pdf", "pdf2svg"),
+        (".tex", "pdflatex"),
+        (".tex", "pdf2svg"),
+    ],
+)
+def test_missing_converter_logs_error_and_cleans_all_tempdirs(
+    tmp_path: Path, monkeypatch, caplog, source_suffix: str, missing_tool: str
+) -> None:
+    source = tmp_path / f"figure{source_suffix}"
+    source.write_text("source")
+    monkeypatch.setattr(renderers.tempfile, "tempdir", str(tmp_path))
+
+    def fake_run(cmd, **kwargs):
+        if cmd[0] == missing_tool:
+            raise FileNotFoundError(f"No such executable: {missing_tool}")
+        output_dir = Path(cmd[cmd.index("-output-directory") + 1])
+        jobname = cmd[cmd.index("-jobname") + 1]
+        (output_dir / f"{jobname}.pdf").write_bytes(b"%PDF-1.4")
+        return CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(renderers.subprocess, "run", fake_run)
+    with caplog.at_level("ERROR", logger="pc"):
+        rendered = renderers.render_file_to_svg(source)
+
+    assert rendered is None
+    assert missing_tool in caplog.text
+    assert list(tmp_path.iterdir()) == [source]
+
+
+def test_pdf_conversion_without_output_is_a_failure(
+    tmp_path: Path, monkeypatch, caplog
+) -> None:
+    monkeypatch.setattr(renderers.tempfile, "tempdir", str(tmp_path))
+    monkeypatch.setattr(
+        renderers.subprocess,
+        "run",
+        lambda cmd, **kwargs: CompletedProcess(cmd, 0, "", ""),
+    )
+    with caplog.at_level("ERROR", logger="pc"):
+        rendered = renderers.pdf_to_svg(tmp_path / "figure.pdf")
+    assert rendered is None
+    assert "did not produce" in caplog.text
+    assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize(
+    "data", [_tiny_png(10, 20)[:18], _tiny_png(0, 20), _tiny_png(10, 0)]
+)
+def test_png_with_incomplete_or_zero_dimensions_is_rejected(data: bytes) -> None:
+    assert renderers._png_size(data) is None

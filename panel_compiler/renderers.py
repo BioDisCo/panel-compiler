@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import copy
 import logging
+import re
 import shlex
 import shutil
 import subprocess
@@ -13,8 +14,11 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 
+from panel_compiler.dimensions import SVGDimensions
+
 logger = logging.getLogger("pc")
 _MAX_LOG_LINES = 40
+_LOCAL_URL = re.compile(r"url\(\s*(['\"]?)#([^\s'\"()]+)\1\s*\)", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -31,46 +35,57 @@ class RenderedFigure:
 
 def _rewrite_ids(elements: list[ET.Element], prefix: str) -> None:
     """Prefix all IDs and their references within elements to avoid conflicts."""
-    ids = set()
-    for el in elements:
-        for node in el.iter():
-            if id_val := node.get("id"):
-                ids.add(id_val)
+    ids = {
+        value: f"{prefix}-{value}"
+        for el in elements
+        for node in el.iter()
+        if (value := node.get("id"))
+    }
 
     if not ids:
         return
 
-    ref_attrs = {
+    href_attrs = {
         "href",
         "{http://www.w3.org/1999/xlink}href",
-        "clip-path",
-        "mask",
-        "fill",
-        "stroke",
-        "filter",
-        "marker-start",
-        "marker-mid",
-        "marker-end",
     }
+
+    def rewrite_url(match: re.Match) -> str:
+        old_id = match.group(2)
+        if old_id not in ids:
+            return match.group(0)
+        start, end = match.span(2)
+        text = match.group(0)
+        return text[: start - match.start()] + ids[old_id] + text[end - match.start() :]
+
     for el in elements:
         for node in el.iter():
             if id_val := node.get("id"):
-                node.set("id", f"{prefix}-{id_val}")
-            for attr in ref_attrs:
-                if val := node.get(attr):
-                    for old_id in ids:
-                        val = val.replace(f"#{old_id}", f"#{prefix}-{old_id}")
-                    node.set(attr, val)
-            if style := node.get("style"):
-                for old_id in ids:
-                    style = style.replace(f"url(#{old_id})", f"url(#{prefix}-{old_id})")
-                node.set("style", style)
+                node.set("id", ids[id_val])
+            for attr, value in list(node.attrib.items()):
+                if attr in href_attrs:
+                    if value.startswith("#") and value[1:] in ids:
+                        node.set(attr, f"#{ids[value[1:]]}")
+                elif attr != "id":
+                    node.set(attr, _LOCAL_URL.sub(rewrite_url, value))
+            if node.tag.rsplit("}", 1)[-1] == "style" and node.text:
+                node.text = _LOCAL_URL.sub(rewrite_url, node.text)
 
 
 def load_svg_content(svg_path: Path, id_prefix: str | None = None) -> list[ET.Element]:
-    """Load SVG content as list of elements."""
+    """Preserve the source viewport and presentation inside a nested SVG.
+
+    Its viewport is sized in source user units; the compiler supplies the outer
+    fit transform. Retaining viewBox also preserves nonzero coordinate origins.
+    """
     tree = ET.parse(svg_path)
-    elements = [copy.deepcopy(element) for element in tree.getroot()]
+    root = tree.getroot()
+    dims = SVGDimensions.from_element(root)
+    root.set("width", str(dims.width))
+    root.set("height", str(dims.height))
+    root.set("x", "0")
+    root.set("y", "0")
+    elements = [root]
     if id_prefix:
         _rewrite_ids(elements, id_prefix)
     return elements
@@ -80,16 +95,26 @@ def pdf_to_svg(pdf_path: Path) -> RenderedFigure | None:
     """Convert PDF to SVG."""
     tmpdir = Path(tempfile.mkdtemp())
     svg_file = tmpdir / "out.svg"
-    result = subprocess.run(
-        ["pdf2svg", str(pdf_path), str(svg_file)],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        shutil.rmtree(tmpdir, ignore_errors=True)
-        logger.error(f"pdf2svg failed for {pdf_path}\n{result.stderr}")
+    rendered = None
+    try:
+        result = subprocess.run(
+            ["pdf2svg", str(pdf_path), str(svg_file)],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            logger.error(f"pdf2svg failed for {pdf_path}\n{result.stderr}")
+        elif not svg_file.is_file():
+            logger.error(f"pdf2svg did not produce expected SVG for {pdf_path}")
+        else:
+            rendered = RenderedFigure(svg_file, tmpdir)
+        return rendered
+    except OSError as exc:
+        logger.error(f"pdf2svg failed for {pdf_path}: {exc}")
         return None
-    return RenderedFigure(svg_file, tmpdir)
+    finally:
+        if rendered is None:
+            shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 def _tail_text(text: str, max_lines: int = _MAX_LOG_LINES) -> str:
@@ -137,70 +162,70 @@ def _format_process_failure(
 
 def tex_file_to_svg(tex_path: Path) -> RenderedFigure | None:
     """Compile a standalone LaTeX document and convert its PDF output to SVG."""
-    tmpdir = Path(tempfile.mkdtemp())
-    jobname = "pc_tex_figure"
-    command = [
-        "pdflatex",
-        "-interaction=nonstopmode",
-        "-halt-on-error",
-        "-file-line-error",
-        "-output-directory",
-        str(tmpdir),
-        "-jobname",
-        jobname,
-        tex_path.name,
-    ]
-    result = subprocess.run(
-        command,
-        capture_output=True,
-        text=True,
-        cwd=tex_path.parent,
-    )
-    if result.returncode != 0:
-        log_path = tmpdir / f"{jobname}.log"
-        logger.error(
-            _format_process_failure(
-                title=f"Failed to compile TeX figure: {tex_path}",
-                command=command,
-                result=result,
-                cwd=tex_path.parent,
-                log_path=log_path,
-            )
-        )
-        shutil.rmtree(tmpdir, ignore_errors=True)
-        return None
-
-    pdf_path = tmpdir / f"{jobname}.pdf"
-    if not pdf_path.exists():
-        log_path = tmpdir / f"{jobname}.log"
-        log_tail = _read_text_tail(log_path)
-        details = [
-            f"pdflatex did not produce expected PDF for TeX figure: {tex_path}",
-            f"Expected PDF: {pdf_path}",
+    with tempfile.TemporaryDirectory() as directory:
+        tmpdir = Path(directory)
+        jobname = "pc_tex_figure"
+        command = [
+            "pdflatex",
+            "-interaction=nonstopmode",
+            "-halt-on-error",
+            "-file-line-error",
+            "-output-directory",
+            str(tmpdir),
+            "-jobname",
+            jobname,
+            tex_path.name,
         ]
-        if log_tail:
-            details.extend([f"LaTeX log tail ({log_path.name}):", log_tail])
-        logger.error("\n".join(details))
-        shutil.rmtree(tmpdir, ignore_errors=True)
-        return None
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                cwd=tex_path.parent,
+            )
+        except OSError as exc:
+            logger.error(f"pdflatex failed for {tex_path}: {exc}")
+            return None
 
-    rendered = pdf_to_svg(pdf_path)
-    if rendered is None:
-        shutil.rmtree(tmpdir, ignore_errors=True)
-        logger.error(f"Failed to convert LaTeX PDF to SVG for {tex_path}")
-        return None
+        log_path = tmpdir / f"{jobname}.log"
+        if result.returncode != 0:
+            logger.error(
+                _format_process_failure(
+                    title=f"Failed to compile TeX figure: {tex_path}",
+                    command=command,
+                    result=result,
+                    cwd=tex_path.parent,
+                    log_path=log_path,
+                )
+            )
+            return None
 
-    svg_path = tmpdir / "out.svg"
-    shutil.move(rendered.svg_path, svg_path)
-    if rendered.tempdir is not None:
-        shutil.rmtree(rendered.tempdir, ignore_errors=True)
-    return RenderedFigure(svg_path, tmpdir)
+        pdf_path = tmpdir / f"{jobname}.pdf"
+        if not pdf_path.is_file():
+            log_tail = _read_text_tail(log_path)
+            details = [
+                f"pdflatex did not produce expected PDF for TeX figure: {tex_path}",
+                f"Expected PDF: {pdf_path}",
+            ]
+            if log_tail:
+                details.extend([f"LaTeX log tail ({log_path.name}):", log_tail])
+            logger.error("\n".join(details))
+            return None
+
+        # The PDF converter owns the returned SVG directory; LaTeX intermediates
+        # can be removed on every exit, including a missing converter executable.
+        rendered = pdf_to_svg(pdf_path)
+        if rendered is None:
+            logger.error(f"Failed to convert LaTeX PDF to SVG for {tex_path}")
+        return rendered
 
 
 def _png_size(data: bytes) -> tuple[int, int] | None:
-    if data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR":
+    if len(data) < 24 or data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR":
         return None
-    return int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
+    width = int.from_bytes(data[16:20], "big")
+    height = int.from_bytes(data[20:24], "big")
+    return (width, height) if width > 0 and height > 0 else None
 
 
 def _jpeg_size(data: bytes) -> tuple[int, int] | None:

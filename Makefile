@@ -1,4 +1,8 @@
 .DEFAULT_GOAL := version
+.PHONY: version test release
+
+test:
+	uv run pytest
 
 version:
 	@uv version

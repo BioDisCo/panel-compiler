@@ -21,14 +21,20 @@ class SVGDimensions:
         the ``width``/``height`` attributes are irrelevant for that ratio; only
         the viewBox extent, which matches element coordinate ranges, matters.
         """
-        tree = ET.parse(svg_path)
-        root = tree.getroot()
+        root = ET.parse(svg_path).getroot()
+        try:
+            return cls.from_element(root)
+        except ValueError as exc:
+            raise ValueError(f"{svg_path}: {exc}") from exc
 
+    @classmethod
+    def from_element(cls, root: ET.Element) -> "SVGDimensions":
+        """Return the source user-unit extent of an SVG root element."""
         viewbox = root.get("viewBox")
         if viewbox:
             parts = [part for part in re.split(r"[\s,]+", viewbox.strip()) if part]
             if len(parts) != 4:
-                raise ValueError(f"Cannot parse viewBox for {svg_path}: {viewbox}")
+                raise ValueError(f"Cannot parse viewBox: {viewbox}")
             return cls(width=float(parts[2]), height=float(parts[3]))
 
         width_attr = root.get("width")
@@ -38,11 +44,11 @@ class SVGDimensions:
                 return cls(width=float(width_attr), height=float(height_attr))
             except ValueError:
                 raise ValueError(
-                    f"Cannot determine user-unit dimensions for {svg_path}: "
+                    "Cannot determine user-unit dimensions: "
                     "no viewBox and physical-unit width/height are ambiguous"
                 )
 
-        raise ValueError(f"Cannot determine dimensions for {svg_path}")
+        raise ValueError("Cannot determine dimensions")
 
 
 def get_group_dimensions(
@@ -63,6 +69,14 @@ def get_group_dimensions(
     if config_dims:
         return config_dims
 
+    # Generated content is not template geometry. In particular an originally
+    # unsized group must stay unscaled when a later source changes dimensions.
+    if any(
+        {"pc-content", "pc-tex-content"}.intersection(child.get("class", "").split())
+        for child in group
+    ):
+        return None
+
     bbox = calculate_bbox(group)
     if bbox:
         return bbox
@@ -78,8 +92,8 @@ def calculate_bbox(element: ET.Element) -> SVGDimensions | None:
     max_y = float("-inf")
 
     for elem in element.iter():
-        x = elem.get("x")
-        y = elem.get("y")
+        x = elem.get("x", "0")
+        y = elem.get("y", "0")
         w = elem.get("width")
         h = elem.get("height")
 
@@ -90,8 +104,8 @@ def calculate_bbox(element: ET.Element) -> SVGDimensions | None:
             min_y = min(min_y, float(y))
             max_y = max(max_y, float(y) + float(h))
 
-        cx = elem.get("cx")
-        cy = elem.get("cy")
+        cx = elem.get("cx", "0")
+        cy = elem.get("cy", "0")
         r = elem.get("r")
         if cx and cy and r:
             cx_f, cy_f, r_f = float(cx), float(cy), float(r)

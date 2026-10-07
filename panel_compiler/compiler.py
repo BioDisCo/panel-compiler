@@ -73,11 +73,11 @@ def _compile_tree(
         svg_file = parsed["svg_file"]
 
         try:
-            if fontsize.endswith("pt"):
+            if isinstance(fontsize, str) and fontsize.endswith("pt"):
                 fontsize_num = float(fontsize[:-2])
             else:
                 fontsize_num = float(fontsize)
-        except (ValueError, AttributeError):
+        except (ValueError, TypeError):
             fontsize_num = 10.0
 
         if tex_text:
@@ -115,12 +115,22 @@ def _compile_tree(
 
 
 def _find_placeholder(root: ET.Element, figure_id: str) -> ET.Element | None:
-    group = root.find(f".//*[@{INKSCAPE_LABEL}='{figure_id}']")
-    if group is None:
-        group = root.find(f".//*[@label='{figure_id}']")
-    if group is None:
-        group = root.find(f".//*[@id='{figure_id}']")
-    return group
+    def candidates(parent: ET.Element):
+        for child in parent:
+            if {"pc-content", "pc-tex-content"}.intersection(
+                child.get("class", "").split()
+            ):
+                continue
+            if child.tag.rsplit("}", 1)[-1] in {"g", "rect"}:
+                yield child
+            yield from candidates(child)
+
+    placeholders = list(candidates(root))
+    for attr in (INKSCAPE_LABEL, "label", "id"):
+        for group in placeholders:
+            if group.get(attr) == figure_id:
+                return group
+    return None
 
 
 def _parse_figure_config(figure_config) -> dict:
@@ -188,6 +198,15 @@ def _render_figure_file(
             scale = calculate_scale(source_dims, target_dims, fit)
 
         content = load_svg_content(rendered.svg_path, id_prefix=figure_id)
+        if (
+            target_dims is not None
+            and config_dims is None
+            and not (group.get("width") and group.get("height"))
+        ):
+            # Preserve dimensions inferred from template children before they
+            # are replaced, so self-overwriting compilation remains stable.
+            group.set("data-pc-width", str(target_dims.width))
+            group.set("data-pc-height", str(target_dims.height))
         return content, scale
     finally:
         rendered.cleanup()
@@ -204,7 +223,10 @@ def _prepare_placeholder(
     if tag_name == "rect":
         ns = group.tag.split("}")[0] + "}" if "}" in group.tag else ""
         container = ET.Element(f"{ns}g")
-        container.set("id", figure_id)
+        container.set("id", original_attribs.get("id", figure_id))
+        for attr in (INKSCAPE_LABEL, "label"):
+            if attr in original_attribs:
+                container.set(attr, original_attribs[attr])
         x = original_attribs.get("x", "0")
         y = original_attribs.get("y", "0")
         transforms = []

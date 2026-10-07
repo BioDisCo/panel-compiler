@@ -138,9 +138,8 @@ def test_invalid_fontsize_falls_back_to_default(tmp_path: Path, monkeypatch) -> 
     assert wrapper.get("transform") == f"scale({10.0 / 12.0})"
 
 
-def test_explicit_config_dimensions_override_group_size(tmp_path: Path) -> None:
-    """`width`/`height` in the figure config override the placeholder group's own
-    size when computing the fit scale."""
+def test_group_dimensions_take_priority_over_config_fallback(tmp_path: Path) -> None:
+    """Explicit placeholder dimensions take priority over the config fallback."""
     _make_panel(tmp_path / "panel.svg", width=200, height=100)
     _make_figure(tmp_path / "fig.svg", width=400, height=100)
 
@@ -178,3 +177,21 @@ def test_group_without_dimensions_embeds_unscaled(tmp_path: Path) -> None:
     assert group is not None
     wrapper = list(group)[0]
     assert wrapper.get("transform") is None
+
+
+@pytest.mark.parametrize("size", [24, 24.0, "24", "24pt"])
+def test_numeric_and_string_font_sizes_agree(tmp_path: Path, monkeypatch, size) -> None:
+    _make_panel(tmp_path / "panel.svg")
+    monkeypatch.setattr(
+        compiler,
+        "render_latex_to_svg",
+        lambda text: [ET.fromstring('<path d="M 0 0"/>')],
+    )
+    tree = _compile_tree(
+        {"panel": "panel.svg", "plot": {"tex": "x", "size": size}},
+        tmp_path / "pc.yaml",
+    )
+    assert tree is not None
+    group = tree.getroot().find(f".//*[@{{{INKSCAPE_NS}}}label='plot']")
+    assert group is not None
+    assert group[0].get("transform") == "scale(2.0)"

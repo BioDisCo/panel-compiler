@@ -296,3 +296,65 @@ def test_panel_is_template_and_output_does_not_corrupt(tmp_path: Path) -> None:
 
     # And they must agree
     assert (tmp_path / "panel.svg").read_text() == (tmp_path / "out2.svg").read_text()
+
+
+@pytest.mark.parametrize(
+    "initial_content",
+    [
+        '<rect x="0" y="0" width="80" height="40"/>',
+        '<rect width="80" height="40"/>',
+    ],
+)
+def test_group_bbox_dimensions_remain_stable_on_recompile(
+    tmp_path: Path, initial_content: str
+) -> None:
+    _figure_svg(tmp_path / "fig.svg", 400, 200, "400", "200")
+    panel = tmp_path / "panel.svg"
+    panel.write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        f'<g id="fig">{initial_content}</g></svg>'
+    )
+    for _ in range(3):
+        tree = _compile_tree(
+            {"panel": "panel.svg", "fig": "fig.svg"}, tmp_path / "pc.yaml"
+        )
+        assert tree is not None
+        assert _extract_scale(tree) == pytest.approx(0.2)
+        tree.write(panel)
+
+
+def test_unscaled_group_stays_unscaled_when_source_size_changes(tmp_path: Path) -> None:
+    panel = tmp_path / "panel.svg"
+    panel.write_text('<svg xmlns="http://www.w3.org/2000/svg"><g id="fig"/></svg>')
+    for size in (100, 200, 300):
+        _figure_svg(tmp_path / "fig.svg", size, size, str(size), str(size))
+        tree = _compile_tree(
+            {"panel": "panel.svg", "fig": "fig.svg"}, tmp_path / "pc.yaml"
+        )
+        assert tree is not None
+        group = tree.getroot().find(".//*[@id='fig']")
+        assert group is not None
+        assert group[0].get("transform") is None
+        tree.write(panel)
+
+
+def test_embedded_svg_preserves_viewbox_and_root_presentation(tmp_path: Path) -> None:
+    (tmp_path / "fig.svg").write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg" id="source" '
+        'width="200mm" height="100mm" viewBox="10 -20 200 100" '
+        'fill="red" style="stroke: blue" transform="rotate(5)">'
+        '<rect x="10" y="-20" width="200" height="100"/></svg>'
+    )
+    _panel_mm(tmp_path / "panel.svg", 5, 7, 100, 50)
+    tree = _compile_tree({"panel": "panel.svg", "fig": "fig.svg"}, tmp_path / "pc.yaml")
+    assert tree is not None
+    assert _extract_scale(tree) == pytest.approx(0.5)
+    source = tree.getroot().find(".//*[@id='fig-source']")
+    assert source is not None
+    assert source.tag == "{http://www.w3.org/2000/svg}svg"
+    assert source.get("viewBox") == "10 -20 200 100"
+    assert float(source.get("width")) == 200
+    assert float(source.get("height")) == 100
+    assert source.get("fill") == "red"
+    assert source.get("style") == "stroke: blue"
+    assert source.get("transform") == "rotate(5)"
